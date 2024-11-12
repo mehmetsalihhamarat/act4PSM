@@ -2,56 +2,84 @@ import numpy as np
 import torch
 import os
 import h5py
+import glob
+import cv2
 from torch.utils.data import TensorDataset, DataLoader
 
 import IPython
 e = IPython.embed
 
+IMAGE_WIDTH = 320
+IMAGE_HEIGHT = 240
+
 class EpisodicDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, chunk_size):
         super(EpisodicDataset).__init__()
         self.episode_ids = episode_ids
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
         self.norm_stats = norm_stats
-        self.is_sim = None
-        self.__getitem__(0) # initialize self.is_sim
+        self.chunck_size = chunk_size
 
     def __len__(self):
         return len(self.episode_ids)
 
     def __getitem__(self, index):
-        sample_full_episode = False # hardcode
+        sample_full_episode = False  # hardcode
 
         episode_id = self.episode_ids[index]
-        dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
+        episode_id = f"{episode_id+1:04d}"
+
+        # Define the pattern with a wildcard for the timestamp part
+        pattern = os.path.join(self.dataset_dir, f'00001-{episode_id}-*.h5')
+
+        # Use glob to find the file(s) matching the pattern
+        matching_files = glob.glob(pattern)
+
+        # Check if at least one file matches the pattern
+        if not matching_files:
+            raise FileNotFoundError(f"No file found for pattern: {pattern}")
+
+        # Use the first matching file (or modify to handle multiple matches)
+        dataset_path = matching_files[0]
+
         with h5py.File(dataset_path, 'r') as root:
-            is_sim = root.attrs['sim']
-            original_action_shape = root['/action'].shape
+            length = root['/upper_body_observations/left_arm_joint_position'].shape[0]
+            original_action_shape = (length, 14)
             episode_len = original_action_shape[0]
             if sample_full_episode:
                 start_ts = 0
             else:
                 start_ts = np.random.choice(episode_len)
             # get observation at start_ts only
-            qpos = root['/observations/qpos'][start_ts]
-            qvel = root['/observations/qvel'][start_ts]
+            qpos_arm_l = root['/upper_body_observations/left_arm_joint_position'][start_ts]
+            qpos_gripper_l = root['/upper_body_observations/left_arm_gripper_position'][start_ts]
+            qpos_arm_r = root['/upper_body_observations/right_arm_joint_position'][start_ts]
+            qpos_gripper_r = root['/upper_body_observations/right_arm_gripper_position'][start_ts]
+            qpos = np.concatenate([qpos_arm_l, qpos_gripper_l, qpos_arm_r, qpos_gripper_r], axis=0)
+
             image_dict = dict()
             for cam_name in self.camera_names:
-                image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
+                origin_image_bytes = root[f'/upper_body_observations/{cam_name}'][start_ts]
+                np_array = np.frombuffer(origin_image_bytes, np.uint8)
+                image = cv2.imdecode(np_array, cv2.IMREAD_UNCHANGED)
+                image_dict[cam_name] = cv2.resize(image, (IMAGE_WIDTH, IMAGE_HEIGHT))
             # get all actions after and including start_ts
-            if is_sim:
-                action = root['/action'][start_ts:]
-                action_len = episode_len - start_ts
-            else:
-                action = root['/action'][max(0, start_ts - 1):] # hack, to make timesteps more aligned
-                action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
+            action_arm_l = root['/upper_body_observations/left_arm_joint_position'][max(0, start_ts - 1) + 1:] # hack, to make timesteps more aligned
+            action_gripper_l = root['/upper_body_observations/left_arm_gripper_position'][max(0, start_ts - 1) + 1:]
+            action_arm_r = root['/upper_body_observations/right_arm_joint_position'][max(0, start_ts - 1) + 1:]
+            action_gripper_r = root['/upper_body_observations/right_arm_gripper_position'][max(0, start_ts - 1) + 1:]
+            action = np.concatenate([action_arm_l, action_gripper_l, action_arm_r, action_gripper_r], axis=1)
+            action_len = episode_len - (max(0, start_ts - 1) + 1) # hack, to make timesteps more aligned
 
-        self.is_sim = is_sim
-        padded_action = np.zeros(original_action_shape, dtype=np.float32)
-        padded_action[:action_len] = action
-        is_pad = np.zeros(episode_len)
-        is_pad[action_len:] = 1
+        padded_action = np.zeros((self.chunck_size, original_action_shape[1]), dtype=np.float32)
+        if action_len <= self.chunck_size:
+            padded_action[:action_len] = action
+        else:
+            padded_action[:] = action[:self.chunck_size]
+        is_pad = np.zeros(self.chunck_size)
+        if action_len < self.chunck_size:
+            is_pad[action_len:] = 1
 
         # new axis for different cameras
         all_cam_images = []
@@ -59,7 +87,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
             all_cam_images.append(image_dict[cam_name])
         all_cam_images = np.stack(all_cam_images, axis=0)
 
-        # construct observations
+        # construct upper_body_observations
         image_data = torch.from_numpy(all_cam_images)
         qpos_data = torch.from_numpy(qpos).float()
         action_data = torch.from_numpy(padded_action).float()
@@ -80,15 +108,40 @@ def get_norm_stats(dataset_dir, num_episodes):
     all_qpos_data = []
     all_action_data = []
     for episode_idx in range(num_episodes):
-        dataset_path = os.path.join(dataset_dir, f'episode_{episode_idx}.hdf5')
+        episode_idx = f"{episode_idx+1:04d}"
+        # Construct the pattern to match files with a wildcard for the timestamp
+        pattern = os.path.join(dataset_dir, f'00001-{episode_idx}-*.h5')
+
+        # Find files matching the pattern
+        matching_files = glob.glob(pattern)
+
+        # Ensure at least one matching file exists
+        if not matching_files:
+            raise FileNotFoundError(f"No file found for pattern: {pattern}")
+
+        # Use the first matching file
+        dataset_path = matching_files[0]
+
+        # Open the file with h5py and process it
         with h5py.File(dataset_path, 'r') as root:
-            qpos = root['/observations/qpos'][()]
-            qvel = root['/observations/qvel'][()]
-            action = root['/action'][()]
+            qpos_arm_l = root['/upper_body_observations/left_arm_joint_position'][()]
+            qpos_gripper_l = root['/upper_body_observations/left_arm_gripper_position'][()]
+            qpos_arm_r = root['/upper_body_observations/right_arm_joint_position'][()]
+            qpos_gripper_r = root['/upper_body_observations/right_arm_gripper_position'][()]
+            qpos = np.concatenate([qpos_arm_l, qpos_gripper_l, qpos_arm_r, qpos_gripper_r], axis=1)
+            
+            action_arm_l = root['/upper_body_observations/left_arm_joint_position'][()]
+            action_gripper_l = root['/upper_body_observations/left_arm_gripper_position'][()]
+            action_arm_r = root['/upper_body_observations/right_arm_joint_position'][()]
+            action_gripper_r = root['/upper_body_observations/right_arm_gripper_position'][()]
+            action = np.concatenate([action_arm_l, action_gripper_l, action_arm_r, action_gripper_r], axis=1)
+            action = action[1:] # remove first action
+
         all_qpos_data.append(torch.from_numpy(qpos))
         all_action_data.append(torch.from_numpy(action))
-    all_qpos_data = torch.stack(all_qpos_data)
-    all_action_data = torch.stack(all_action_data)
+
+    all_qpos_data = torch.concatenate(all_qpos_data, dim=0)
+    all_action_data = torch.concatenate(all_action_data, dim=0)
     all_action_data = all_action_data
 
     # normalize action data
@@ -108,7 +161,7 @@ def get_norm_stats(dataset_dir, num_episodes):
     return stats
 
 
-def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val):
+def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, chunk_size):
     print(f'\nData from: {dataset_dir}\n')
     # obtain train test split
     train_ratio = 0.8
@@ -120,51 +173,12 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     norm_stats = get_norm_stats(dataset_dir, num_episodes)
 
     # construct dataset and dataloader
-    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats)
-    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats)
+    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, chunk_size)
+    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, chunk_size)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
 
-    return train_dataloader, val_dataloader, norm_stats, train_dataset.is_sim
-
-
-### env utils
-
-def sample_box_pose():
-    x_range = [0.0, 0.2]
-    y_range = [0.4, 0.6]
-    z_range = [0.05, 0.05]
-
-    ranges = np.vstack([x_range, y_range, z_range])
-    cube_position = np.random.uniform(ranges[:, 0], ranges[:, 1])
-
-    cube_quat = np.array([1, 0, 0, 0])
-    return np.concatenate([cube_position, cube_quat])
-
-def sample_insertion_pose():
-    # Peg
-    x_range = [0.1, 0.2]
-    y_range = [0.4, 0.6]
-    z_range = [0.05, 0.05]
-
-    ranges = np.vstack([x_range, y_range, z_range])
-    peg_position = np.random.uniform(ranges[:, 0], ranges[:, 1])
-
-    peg_quat = np.array([1, 0, 0, 0])
-    peg_pose = np.concatenate([peg_position, peg_quat])
-
-    # Socket
-    x_range = [-0.2, -0.1]
-    y_range = [0.4, 0.6]
-    z_range = [0.05, 0.05]
-
-    ranges = np.vstack([x_range, y_range, z_range])
-    socket_position = np.random.uniform(ranges[:, 0], ranges[:, 1])
-
-    socket_quat = np.array([1, 0, 0, 0])
-    socket_pose = np.concatenate([socket_position, socket_quat])
-
-    return peg_pose, socket_pose
+    return train_dataloader, val_dataloader, norm_stats
 
 ### helper functions
 

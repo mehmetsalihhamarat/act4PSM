@@ -20,15 +20,24 @@ def load_hdf5(dataset_dir, dataset_name):
         exit()
 
     with h5py.File(dataset_path, 'r') as root:
-        is_sim = root.attrs['sim']
-        qpos = root['/observations/qpos'][()]
-        qvel = root['/observations/qvel'][()]
+        qpos_arm_l = root['/upper_body_observations/left_arm_joint_position'][()]
+        qpos_gripper_l = root['/upper_body_observations/left_arm_gripper_position'][()]
+        qpos_arm_r = root['/upper_body_observations/right_arm_joint_position'][()]
+        qpos_gripper_r = root['/upper_body_observations/right_arm_gripper_position'][()]
+        qpos = np.concatenate([qpos_arm_l, qpos_gripper_l, qpos_arm_r, qpos_gripper_r], axis=1)
+
+        action_arm_l = root['/upper_body_observations/left_arm_joint_position'][()]
+        action_gripper_l = root['/upper_body_observations/left_arm_gripper_position'][()]
+        action_arm_r = root['/upper_body_observations/right_arm_joint_position'][()]
+        action_gripper_r = root['/upper_body_observations/right_arm_gripper_position'][()]
+        action = np.concatenate([action_arm_l, action_gripper_l, action_arm_r, action_gripper_r], axis=1)
+        action = action[1:] # remove first action
         action = root['/action'][()]
         image_dict = dict()
-        for cam_name in root[f'/observations/images/'].keys():
-            image_dict[cam_name] = root[f'/observations/images/{cam_name}'][()]
+        for cam_name in root[f'/upper_body_observations/'].keys():
+            image_dict[cam_name] = root[f'/upper_body_observations/{cam_name}'][()]
 
-    return qpos, qvel, action, image_dict
+    return qpos, action, image_dict
 
 def main(args):
     dataset_dir = args['dataset_dir']

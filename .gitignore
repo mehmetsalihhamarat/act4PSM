@@ -139,5 +139,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-ckpt_dir/
+ckpt/
 *.ipynb
