@@ -39,9 +39,7 @@ def visualize_differences_4(qpos_list, gt_list, infer_list, gt2_list=None, plot_
     infer = np.array(infer_list)
     num_ts, num_dim = gt.shape
     
-    STATE_NAMES_L = ["waist_l", "shoulder_l", "elbow_l", "forearm_roll_l", "wrist_angle_l", "wrist_rotate_l", "gripper_l"]
-    STATE_NAMES_R = ["waist_r", "shoulder_r", "elbow_r", "forearm_roll_r", "wrist_angle_r", "wrist_rotate_r", "gripper_r"]
-    STATE_NAMES = STATE_NAMES_L + STATE_NAMES_R
+    STATE_NAMES = ["waist", "shoulder", "elbow", "forearm_roll", "wrist_angle", "wrist_rotate", "gripper"]
     
     h, w = 2, num_dim
     num_figs = num_dim
@@ -97,7 +95,7 @@ def get_image(image_dict, camera_names, t):
     return curr_image
 
 
-def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True,dataset_dir=None):
+def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True, dataset_dir=None):
     set_seed(1000)
     ckpt_dir = config['ckpt_dir']
     state_dim = 14
@@ -105,7 +103,25 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True,dataset_dir=No
     temporal_agg = config['temporal_agg']
     ckpt_path = os.path.join(ckpt_dir, ckpt_name)
 
-    policy = make_policy(policy_class, config)
+    lr_backbone = 1e-5
+    backbone = 'resnet18'
+    enc_layers = 4 
+    dec_layers = 7
+    nheads = 8
+    policy_config = {'lr': config['lr'],
+                        'num_queries': config['chunk_size'],
+                        'kl_weight': config['kl_weight'],
+                        'hidden_dim': config['hidden_dim'],
+                        'dim_feedforward': config['dim_feedforward'],
+                        'lr_backbone': lr_backbone,
+                        'backbone': backbone,
+                        'enc_layers': enc_layers,
+                        'dec_layers': dec_layers,
+                        'nheads': nheads,
+                        'camera_names': camera_names,
+                        }
+
+    policy = make_policy(policy_class, policy_config)
     loading_status = policy.load_state_dict(torch.load(ckpt_path))
     print(loading_status)
     policy.cuda()
@@ -123,8 +139,7 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True,dataset_dir=No
     num_queries = config['chunk_size']
    
     files = list()
-    for directory in dataset_dir:
-        files.extend(glob.glob(os.path.join(directory, '**', '*.h5'), recursive=True))
+    files.extend(glob.glob(os.path.join(dataset_dir, '**', '*.h5'), recursive=True))
     files = sorted(files)
     episode_id = 0
     for filename in files:
@@ -141,7 +156,6 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True,dataset_dir=No
             ### evaluation loop
             if temporal_agg:
                 all_time_actions = torch.zeros([num_queries, num_queries, state_dim]).cuda() 
-            qpos_list = []
             target_qpos_list = []
             with torch.inference_mode():
                 for t in range(action_gt.shape[0]):
@@ -178,11 +192,12 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True,dataset_dir=No
                     raw_action = raw_action.squeeze(0).cpu().numpy()
                     action = post_process(raw_action)
                     target_qpos = action
-                    action_infer = target_qpos
+                    target_qpos_list.append(target_qpos)
+            action_infer = np.array(target_qpos_list)
 
             print("file name:", filename)
             visualize_differences_4(qpos_gt, action_gt, action_infer, \
-                                    plot_path = os.path.join(dataset_dir[0]), \
+                                    plot_path = os.path.join(dataset_dir, "plot"), \
                                     label_overwrite = ['state','action_gt','infer'], \
                                     plot_name = f'episode_{episode_id}_qpos_qf_{query_frequency}.png')
         episode_id += 1
@@ -192,12 +207,17 @@ def count_h5_files(dataset_dir):
     h5_files = glob.glob(os.path.join(dataset_dir, '**', '*.h5'), recursive=True)
     # 返回文件数量
     return len(h5_files)
-       
-def main(args_dict):
+        
+def make_policy(policy_class, policy_config):
+    if policy_class == 'ACT':
+        policy = ACTPolicy(policy_config)
+    else:
+        raise NotImplementedError
+    return policy
+
+def main(args_dict, dataset_dir):
     set_seed(args_dict["seed"])
     # command line parameters
-    
-    dataset_dir = args_dict['dataset_dir']
 
     num_episodes = 0
     for directory in dataset_dir:
@@ -207,17 +227,12 @@ def main(args_dict):
     camera_names = TASK_CONFIGS[task_name]['camera_names']
     
     ckpt_name = f'policy_best.ckpt'
-    eval_bc_h5(args_dict, ckpt_name, camera_names, save_episode=True, dataset_dir=dataset_dir)  #
-        
-def make_policy(policy_class, policy_config):
-    if policy_class == 'ACT':
-        policy = ACTPolicy(policy_config)
-    else:
-        raise NotImplementedError
-    return policy
+    eval_bc_h5(args_dict, ckpt_name, camera_names, save_episode=True, dataset_dir=dataset_dir)
 
 
 if __name__ == '__main__':
+    dataset_dir = 'data'
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True)
     parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', required=True)
@@ -227,5 +242,12 @@ if __name__ == '__main__':
     # for ACT
     parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
     parser.add_argument('--temporal_agg', action='store_true')
+    parser.add_argument('--kl_weight', action='store', type=int, help='KL Weight', required=False)
+    parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
+    parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
+    parser.add_argument('--lr', action='store', type=float, help='lr', required=True)
+    parser.add_argument('--batch_size', action='store', type=int, help='batch_size', required=True)
+    parser.add_argument('--num_epochs', action='store', type=int, help='num_epochs', required=True)
 
-    main(vars(parser.parse_args()))
+
+    main(vars(parser.parse_args()), dataset_dir)
