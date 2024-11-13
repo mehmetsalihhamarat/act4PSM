@@ -13,13 +13,14 @@ IMAGE_WIDTH = 320
 IMAGE_HEIGHT = 240
 
 class EpisodicDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, chunk_size):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, chunk_size, img_compressed):
         super(EpisodicDataset).__init__()
         self.episode_ids = episode_ids
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
         self.norm_stats = norm_stats
         self.chunck_size = chunk_size
+        self.img_compressed = img_compressed
 
     def __len__(self):
         return len(self.episode_ids)
@@ -31,7 +32,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         episode_id = f"{episode_id+1:04d}"
 
         # Define the pattern with a wildcard for the timestamp part
-        pattern = os.path.join(self.dataset_dir, f'00001-{episode_id}-*.h5')
+        pattern = os.path.join(self.dataset_dir, f'*-{episode_id}-*.h5')
 
         # Use glob to find the file(s) matching the pattern
         matching_files = glob.glob(pattern)
@@ -42,6 +43,8 @@ class EpisodicDataset(torch.utils.data.Dataset):
 
         # Use the first matching file (or modify to handle multiple matches)
         dataset_path = matching_files[0]
+
+        
 
         with h5py.File(dataset_path, 'r') as root:
             length = root['/upper_body_observations/left_arm_joint_position'].shape[0]
@@ -60,10 +63,14 @@ class EpisodicDataset(torch.utils.data.Dataset):
 
             image_dict = dict()
             for cam_name in self.camera_names:
-                origin_image_bytes = root[f'/upper_body_observations/{cam_name}'][start_ts]
-                np_array = np.frombuffer(origin_image_bytes, np.uint8)
-                image = cv2.imdecode(np_array, cv2.IMREAD_UNCHANGED)
-                image_dict[cam_name] = cv2.resize(image, (IMAGE_WIDTH, IMAGE_HEIGHT))
+                if self.img_compressed:
+                    origin_image_bytes = root[f'/upper_body_observations/{cam_name}'][start_ts]
+                    np_array = np.frombuffer(origin_image_bytes, np.uint8)
+                    image = cv2.imdecode(np_array, cv2.IMREAD_UNCHANGED)
+                    image_dict[cam_name] = cv2.resize(image, (IMAGE_WIDTH, IMAGE_HEIGHT))
+                else:
+                    image = root[f'/upper_body_observations/{cam_name}'][start_ts]
+                    image_dict[cam_name] = cv2.resize(image, (IMAGE_WIDTH, IMAGE_HEIGHT))
             # get all actions after and including start_ts
             action_arm_l = root['/upper_body_observations/left_arm_joint_position'][max(0, start_ts - 1) + 1:] # hack, to make timesteps more aligned
             action_gripper_l = root['/upper_body_observations/left_arm_gripper_position'][max(0, start_ts - 1) + 1:]
@@ -110,7 +117,7 @@ def get_norm_stats(dataset_dir, num_episodes):
     for episode_idx in range(num_episodes):
         episode_idx = f"{episode_idx+1:04d}"
         # Construct the pattern to match files with a wildcard for the timestamp
-        pattern = os.path.join(dataset_dir, f'00001-{episode_idx}-*.h5')
+        pattern = os.path.join(dataset_dir, f'*-{episode_idx}-*.h5')
 
         # Find files matching the pattern
         matching_files = glob.glob(pattern)
@@ -161,7 +168,7 @@ def get_norm_stats(dataset_dir, num_episodes):
     return stats
 
 
-def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, chunk_size):
+def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, chunk_size, img_compressed):
     print(f'\nData from: {dataset_dir}\n')
     # obtain train test split
     train_ratio = 0.8
@@ -173,8 +180,8 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     norm_stats = get_norm_stats(dataset_dir, num_episodes)
 
     # construct dataset and dataloader
-    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, chunk_size)
-    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, chunk_size)
+    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, chunk_size, img_compressed)
+    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, chunk_size, img_compressed)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
 

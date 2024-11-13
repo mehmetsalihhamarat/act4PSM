@@ -29,7 +29,6 @@ def main(args):
     task_config = TASK_CONFIGS[task_name]
     dataset_dir = task_config['dataset_dir']
     num_episodes = task_config['num_episodes']
-    episode_len = task_config['episode_len']
     camera_names = task_config['camera_names']
 
     # fixed parameters
@@ -58,7 +57,6 @@ def main(args):
     config = {
         'num_epochs': num_epochs,
         'ckpt_dir': ckpt_dir,
-        'episode_len': episode_len,
         # 'state_dim': state_dim,
         'lr': args['lr'],
         'policy_class': policy_class,
@@ -69,7 +67,7 @@ def main(args):
         'camera_names': camera_names
     }
 
-    train_dataloader, val_dataloader, stats = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, args['chunk_size'])
+    train_dataloader, val_dataloader, stats = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, args['chunk_size'], args['img_compressed'])
 
     # save dataset stats
     if not os.path.isdir(ckpt_dir):
@@ -230,5 +228,7 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
     parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
     parser.add_argument('--temporal_agg', action='store_true')
-    
+
+    parser.add_argument('--img_compressed', action='store_true')
+
     main(vars(parser.parse_args()))

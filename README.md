@@ -56,19 +56,33 @@ To train ACT:
     # Pick basket task
     python3 imitate_episodes.py \
     --task_name pick_basket \
-    --ckpt_dir ckpt \
+    --ckpt_dir ckpt/pick_basket \
     --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
     --num_epochs 2000  --lr 1e-5 \
+    --temporal_agg \
+    --seed 0 \
+    --img_compressed
+
+    python3 imitate_episodes.py \
+    --task_name pick_apple \
+    --ckpt_dir ckpt/pick_apple \
+    --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 10000  --lr 1e-5 \
+    --temporal_agg \
     --seed 0
 
 To play h5 inference:
     python3 play_h5.py \
-    --ckpt_dir ckpt \
+    --ckpt_dir ckpt/pick_basket \
     --task_name pick_basket \
     --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
     --num_epochs 2000  --lr 1e-5 \
     --seed 0 \
     --temporal_agg
+
+To visualize_episodes:
+    python3 visualize_episodes.py \
+    --file_path data/pick_apple/dummy-0001-dummy.h5
 
 
 To evaluate the policy, run the same command but add ``--eval``. This loads the best validation checkpoint.
