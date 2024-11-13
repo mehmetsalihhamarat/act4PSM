@@ -18,7 +18,10 @@ from constants import TASK_CONFIGS
 import IPython
 e = IPython.embed
 import h5py
+import cv2
 
+IMAGE_WIDTH = 320
+IMAGE_HEIGHT = 240
 
 def visualize_differences_4(qpos_list, gt_list, infer_list, gt2_list=None, plot_path=None, ylim=None, label_overwrite=None, plot_name = None):
     if label_overwrite:
@@ -80,10 +83,14 @@ def visualize_differences_4(qpos_list, gt_list, infer_list, gt2_list=None, plot_
     plt.close()
 
 
-def get_image(image_dict, camera_names,t):
+def get_image(image_dict, camera_names, t):
     curr_images = []
     for cam_name in camera_names:
-        curr_image = rearrange(image_dict[cam_name][t], 'h w c -> c h w')
+        curr_image_bytes = image_dict[cam_name][t]
+        np_array = np.frombuffer(curr_image_bytes, np.uint8)
+        image = cv2.imdecode(np_array, cv2.IMREAD_UNCHANGED)
+        image = cv2.resize(image, (IMAGE_WIDTH, IMAGE_HEIGHT))
+        curr_image = rearrange(image, 'h w c -> c h w')
         curr_images.append(curr_image)
     curr_image = np.stack(curr_images, axis=0)
     curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
@@ -93,16 +100,17 @@ def get_image(image_dict, camera_names,t):
 def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True,dataset_dir=None):
     set_seed(1000)
     ckpt_dir = config['ckpt_dir']
-    tf = config['tf']
     state_dim = 14
     policy_class = config['policy_class']
     temporal_agg = config['temporal_agg']
     ckpt_path = os.path.join(ckpt_dir, ckpt_name)
+
     policy = make_policy(policy_class, config)
     loading_status = policy.load_state_dict(torch.load(ckpt_path))
     print(loading_status)
     policy.cuda()
     policy.eval()
+
     print(f'Loaded: {ckpt_path}')
     stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl')
     with open(stats_path, 'rb') as f:
@@ -110,12 +118,10 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True,dataset_dir=No
     pre_process = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
     query_frequency = config['chunk_size'] 
-    if temporal_agg:
-        query_frequency = 1
-        num_queries = config['chunk_size']  
-        teornot='te'
-    else:
-        teornot='non-te'
+
+    query_frequency = 1
+    num_queries = config['chunk_size']
+   
     files = list()
     for directory in dataset_dir:
         files.extend(glob.glob(os.path.join(directory, '**', '*.h5'), recursive=True))
@@ -123,25 +129,27 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True,dataset_dir=No
     episode_id = 0
     for filename in files:
         with h5py.File(filename, 'r') as root:
-            original_action = root['/action']
-            qpos_gt = root['/upper_body_observations/qpos']
+            qpos_arm_l = root['/upper_body_observations/left_arm_joint_position'][()]
+            qpos_gripper_l = root['/upper_body_observations/left_arm_gripper_position'][()]
+            qpos_arm_r = root['/upper_body_observations/right_arm_joint_position'][()]
+            qpos_gripper_r = root['/upper_body_observations/right_arm_gripper_position'][()]
+            qpos_gt = np.concatenate([qpos_arm_l, qpos_gripper_l, qpos_arm_r, qpos_gripper_r], axis=1)
+            action_gt = qpos_gt[1:] # remove first action
             image_dict = dict()
             for cam_name in camera_names:
-                image_dict[cam_name] = root[f'/observations/{cam_name}']
-            action_gt = original_action
-            flag_infer = 0
+                image_dict[cam_name] = root[f'/upper_body_observations/{cam_name}']
             ### evaluation loop
             if temporal_agg:
                 all_time_actions = torch.zeros([num_queries, num_queries, state_dim]).cuda() 
             qpos_list = []
             target_qpos_list = []
             with torch.inference_mode():
-                for t in range(original_action.shape[0]):
+                for t in range(action_gt.shape[0]):
                     ### update onscreen render and wait for DT
                     qpos_numpy = qpos_gt[t]
                     qpos = pre_process(qpos_numpy)
                     qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
-                    curr_image = get_image(image_dict, camera_names,t)  #
+                    curr_image = get_image(image_dict, camera_names, t)
                     ### query policy
                     if config['policy_class'] == "ACT":
                         if t % query_frequency == 0:
@@ -170,22 +178,13 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True,dataset_dir=No
                     raw_action = raw_action.squeeze(0).cpu().numpy()
                     action = post_process(raw_action)
                     target_qpos = action
-                    if tf == 'joint_angles':
-                        action_gt2i = target_qpos
-                    if(flag_infer == 0):
-                        action_infer = target_qpos
-                        flag_infer = 1
-                        action_gt2 = action_gt2i
-                    else:
-                        action_infer = np.vstack((action_infer, target_qpos))
-                        action_gt2 = np.vstack((action_gt2, action_gt2i))
-                    qpos_list.append(qpos_numpy)
-                    target_qpos_list.append(target_qpos)
+                    action_infer = target_qpos
+
             print("file name:", filename)
             visualize_differences_4(qpos_gt, action_gt, action_infer, \
                                     plot_path = os.path.join(dataset_dir[0]), \
                                     label_overwrite = ['state','action_gt','infer'], \
-                                    plot_name = f'episode_{episode_id}_qpos_{teornot}_qf_{query_frequency}.png')
+                                    plot_name = f'episode_{episode_id}_qpos_qf_{query_frequency}.png')
         episode_id += 1
 
 def count_h5_files(dataset_dir):
@@ -204,8 +203,8 @@ def main(args_dict):
     for directory in dataset_dir:
         num_episodes += count_h5_files(directory)
 
-    arm_type = ArmType(args_dict['arm_type'])
-    camera_names, qpos_dim, action_dim = get_arm_config(arm_type, args_dict=args_dict)
+    task_name = args_dict['task_name']
+    camera_names = TASK_CONFIGS[task_name]['camera_names']
     
     ckpt_name = f'policy_best.ckpt'
     eval_bc_h5(args_dict, ckpt_name, camera_names, save_episode=True, dataset_dir=dataset_dir)  #
@@ -218,7 +217,15 @@ def make_policy(policy_class, policy_config):
     return policy
 
 
-
 if __name__ == '__main__':
-    parser = get_parser()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True)
+    parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', required=True)
+    parser.add_argument('--task_name', action='store', type=str, help='task_name', required=True)
+    parser.add_argument('--seed', action='store', type=int, help='seed', required=True)
+
+    # for ACT
+    parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
+    parser.add_argument('--temporal_agg', action='store_true')
+
     main(vars(parser.parse_args()))
