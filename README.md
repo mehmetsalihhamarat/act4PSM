@@ -1,4 +1,4 @@
-# ACT: Action Chunking with Transformers
+# ACT: Action Chunking with Transformers (for Galaxea Dataset)
 
 ### *New*: [ACT tuning tips](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing)
 TL;DR: if your ACT policy is jerky or pauses in the middle of an episode, just train for longer! Success rate and smoothness can improve way after loss plateaus.
@@ -9,17 +9,10 @@ This repo contains the implementation of ACT, together with 2 simulated environm
 Transfer Cube and Bimanual Insertion. You can train and evaluate ACT in sim or real.
 For real, you would also need to install [ALOHA](https://github.com/tonyzhaozh/aloha).
 
-### Updates:
-You can find all scripted/human demo for simulated environments [here](https://drive.google.com/drive/folders/1gPR03v05S1xiInoVJn7G7VJ9pDCnxq9O?usp=share_link).
-
-
 ### Repo Structure
 - ``imitate_episodes.py`` Train and Evaluate ACT
 - ``policy.py`` An adaptor for ACT policy
 - ``detr`` Model definitions of ACT, modified from DETR
-- ``sim_env.py`` Mujoco + DM_Control environments with joint space control
-- ``ee_sim_env.py`` Mujoco + DM_Control environments with EE space control
-- ``scripted_policy.py`` Scripted policies for sim environments
 - ``constants.py`` Constants shared across files
 - ``utils.py`` Utils such as data loading and helper functions
 - ``visualize_episodes.py`` Save videos from a .hdf5 dataset
@@ -43,7 +36,7 @@ You can find all scripted/human demo for simulated environments [here](https://d
     pip install packaging
     pip install h5py
     pip install ipython
-    cd act/detr && pip install -e .
+    cd act_opensource/detr && pip install -e .
 
 ### Example Usages
 
@@ -52,17 +45,8 @@ To set up a new terminal, run:
     conda activate aloha
     cd <path to act repo>
 
-### Simulated experiments
+### Instructions
 
-We use ``sim_transfer_cube_scripted`` task in the examples below. Another option is ``sim_insertion_scripted``.
-To generated 50 episodes of scripted data, run:
-
-    python3 record_sim_episodes.py \
-    --task_name sim_transfer_cube_scripted \
-    --dataset_dir <data save dir> \
-    --num_episodes 50
-
-To can add the flag ``--onscreen_render`` to see real-time rendering.
 To visualize the episode after it is collected, run
 
     python3 visualize_episodes.py --dataset_dir <data save dir> --episode_idx 0
