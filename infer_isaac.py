@@ -29,6 +29,8 @@ parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size',
 parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
 parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
 parser.add_argument('--temporal_agg', action='store_true')
+parser.add_argument('--num_queries', default=100, type=int, # will be overridden
+                        help="Number of query slots")
 
 # Legacy
 parser.add_argument("--cpu", action="store_true", default=False, help="Use CPU pipeline.")
@@ -109,6 +111,7 @@ class ACTEvaluator(object):
         self.query_freq = args_dict["chunk_size"]
         self.chunk_size = args_dict["chunk_size"]
         self.camera_names = ["front_rgb", "left_rgb", "right_rgb"]
+        self.action_dim = 14
         self.all_time_actions = torch.zeros(
             [self.chunk_size, self.chunk_size, self.action_dim]
         ).cuda()
@@ -132,10 +135,11 @@ class ACTEvaluator(object):
     def _make_policy(self, args_dict: dict):
         # args_dict["use_one_hot_task"] = False  # todo: 暂时默认不开启multi-task
 
-        ckpt_path = os.path.join(self.ckpt_dir, "policy_model.pth")
+        ckpt_path = os.path.join(self.ckpt_dir, "policy_best.ckpt")
         print("**************ckpt_path: ", ckpt_path)
         policy = ACTPolicy(args_dict)
         loading_status = policy.load_state_dict(torch.load(ckpt_path))
+        # policy = torch.load(ckpt_path)
         print(loading_status)
 
         policy.cuda()
