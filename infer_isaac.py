@@ -132,9 +132,30 @@ class ACTEvaluator(object):
     def _make_policy(self, args_dict: dict):
         # args_dict["use_one_hot_task"] = False  # todo: 暂时默认不开启multi-task
 
+        camera_names = ['rgb_head', 'rgb_left_hand', 'rgb_right_hand']
+        # fixed parameters
+        # state_dim = 7
+        lr_backbone = 1e-5
+        backbone = 'resnet18'
+        enc_layers = 4 
+        dec_layers = 7
+        nheads = 8
+        policy_config = {'lr': args_dict['lr'],
+                        'num_queries': args_dict['chunk_size'],
+                        'kl_weight': args_dict['kl_weight'],
+                        'hidden_dim': args_dict['hidden_dim'],
+                        'dim_feedforward': args_dict['dim_feedforward'],
+                        'lr_backbone': lr_backbone,
+                        'backbone': backbone,
+                        'enc_layers': enc_layers,
+                        'dec_layers': dec_layers,
+                        'nheads': nheads,
+                        'camera_names': camera_names,
+                        }
+
         ckpt_path = os.path.join(self.ckpt_dir, "policy_model.pth")
         print("**************ckpt_path: ", ckpt_path)
-        policy = ACTPolicy(args_dict)
+        policy = ACTPolicy(policy_config)
         loading_status = policy.load_state_dict(torch.load(ckpt_path))
         print(loading_status)
 
