@@ -1,22 +1,16 @@
-# ACT: Action Chunking with Transformers (for Galaxea Dataset)
+# ACT: Action Chunking with Transformers <br> (for Galaxea Dataset)
 
-### *New*: [ACT tuning tips](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing)
-TL;DR: if your ACT policy is jerky or pauses in the middle of an episode, just train for longer! Success rate and smoothness can improve way after loss plateaus.
-
-#### Project Website: https://tonyzhaozh.github.io/aloha/
-
-This repo contains the implementation of ACT, together with 2 simulated environments:
-Transfer Cube and Bimanual Insertion. You can train and evaluate ACT in sim or real.
-For real, you would also need to install [ALOHA](https://github.com/tonyzhaozh/aloha).
+#### Original Authors' Project Website: https://tonyzhaozh.github.io/aloha/
 
 ### Repo Structure
-- ``imitate_episodes.py`` Train and Evaluate ACT
+- ``imitate_episodes.py`` Train ACT using .h5 files
 - ``policy.py`` An adaptor for ACT policy
 - ``detr`` Model definitions of ACT, modified from DETR
 - ``constants.py`` Constants shared across files
 - ``utils.py`` Utils such as data loading and helper functions
-- ``visualize_episodes.py`` Save videos from a .hdf5 dataset
-
+- ``play_h5.py`` Evaluate ACT using a .h5 file
+- ``infer_issac`` Evaluate ACT in with Isaac Lab in Isaac Sim
+- ``visualize_episodes.py`` Visualize states and key frames from a .h5 dataset
 
 ### Installation
 
@@ -47,31 +41,29 @@ To set up a new terminal, run:
 
 ### Instructions
 
-To visualize the episode after it is collected, run
+To visualize an episode, run:
 
-    python3 visualize_episodes.py --dataset_dir <data save dir> --episode_idx 0
+    python3 visualize_episodes.py \
+    --file_path data/pick_basket/dummy-0001-dummy.h5
 
-To train ACT:
-    
-    # Pick basket task
+![vis_1](./rmsrc/vis_1.png)
+![vis_2](./rmsrc/vis_2.png)
+
+
+To __train__ ACT, first add your task config in ``constants.py``, then run:
+
     python3 imitate_episodes.py \
-    --task_name pick_basket \
-    --ckpt_dir ckpt/pick_basket \
+    --task_name pick_carrot \
+    --ckpt_dir ckpt/pick_carrot \
     --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 \
-    --temporal_agg \
+    --num_epochs 10000  --lr 1e-5 \
     --seed 0 \
     --img_compressed
 
-    python3 imitate_episodes.py \
-    --task_name pick_apple \
-    --ckpt_dir ckpt/pick_apple \
-    --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 10000  --lr 1e-5 \
-    --temporal_agg \
-    --seed 0
+If your image data is not compressed, remove ``--img_compressed``.
 
-To play h5 inference:
+To __evaluate__ trained ACT, you can play a .h5 file and it would visualize the difference between the GT and the predicted actions:
+
     python3 play_h5.py \
     --ckpt_dir ckpt/pick_basket \
     --task_name pick_basket \
@@ -80,16 +72,18 @@ To play h5 inference:
     --seed 0 \
     --temporal_agg
 
-To visualize_episodes:
-    python3 visualize_episodes.py \
-    --file_path data/pick_apple/dummy-0001-dummy.h5
+![diff](./rmsrc/diff.jpg)
 
+To evaluate ACT in Isaac Lab, set up the Isaac environment following the [tutorial](https://galaxea.ai/Guide/R1/Simulation_Isaac_Lab_Tutorial/), and run:
 
-To evaluate the policy, run the same command but add ``--eval``. This loads the best validation checkpoint.
-The success rate should be around 90% for transfer cube, and around 50% for insertion.
-To enable temporal ensembling, add flag ``--temporal_agg``.
-Videos will be saved to ``<ckpt_dir>`` for each rollout.
-You can also add ``--onscreen_render`` to see real-time rendering during evaluation.
+    python3 infer_isaac.py  \
+    --task_name pick_apple  \   
+    --ckpt_dir ckpt/pick_apple  \
+    --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 10000  --lr 1e-5  \ 
+    --temporal_agg  \
+    --seed 0
+
 
 For real-world data where things can be harder to model, train for at least 5000 epochs or 3-4 times the length after the loss has plateaued.
 Please refer to [tuning tips](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing) for more info.
