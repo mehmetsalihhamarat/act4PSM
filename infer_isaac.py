@@ -11,6 +11,53 @@ import argparse
 import time
 from omni.isaac.lab.app import AppLauncher
 
+# add argparse arguments
+parser = argparse.ArgumentParser(description="Play policy trained using robomimic for Isaac Lab environments.")
+
+parser.add_argument('--eval', action='store_true')
+parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True)
+parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', required=True)
+parser.add_argument('--task_name', action='store', type=str, help='task_name', required=True)
+parser.add_argument('--batch_size', action='store', type=int, help='batch_size', required=True)
+parser.add_argument('--seed', action='store', type=int, help='seed', required=True)
+parser.add_argument('--num_epochs', action='store', type=int, help='num_epochs', required=True)
+parser.add_argument('--lr', action='store', type=float, help='lr', required=True)
+
+# for ACT
+parser.add_argument('--kl_weight', action='store', type=int, help='KL Weight', required=False)
+parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
+parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
+parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
+parser.add_argument('--temporal_agg', action='store_true')
+
+# Legacy
+parser.add_argument("--cpu", action="store_true", default=False, help="Use CPU pipeline.")
+parser.add_argument(
+    "--disable_fabric",
+    action="store_true",
+    default=False,
+    help="Disable fabric and use USD I/O operations.",
+)
+parser.add_argument(
+    "--task",
+    type=str,
+    default="Isaac-R1-Multi-Fruit-IK-Abs-Direct-v0",
+    help="Name of the task.",
+)
+parser.add_argument("--dataset_dir", nargs="+", help="dataset_dir", required=False)
+parser.add_argument("--result_dir", default="/home/user/zhr_workspace/isacc_lab_galaxea/results/random_pos_continus", help="result_dir", required=False)
+
+
+# append AppLauncher cli args
+AppLauncher.add_app_launcher_args(parser)
+# parse the arguments
+args_cli = parser.parse_args()
+
+# launch omniverse app
+app_launcher = AppLauncher(args_cli)
+simulation_app = app_launcher.app
+
+
 import os
 import torch
 import pickle
@@ -221,50 +268,6 @@ def main():
 
 
 if __name__ == "__main__":
-    # add argparse arguments
-    parser = argparse.ArgumentParser(description="Play policy trained using robomimic for Isaac Lab environments.")
-    
-    parser.add_argument('--eval', action='store_true')
-    parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True)
-    parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', required=True)
-    parser.add_argument('--task_name', action='store', type=str, help='task_name', required=True)
-    parser.add_argument('--batch_size', action='store', type=int, help='batch_size', required=True)
-    parser.add_argument('--seed', action='store', type=int, help='seed', required=True)
-    parser.add_argument('--num_epochs', action='store', type=int, help='num_epochs', required=True)
-    parser.add_argument('--lr', action='store', type=float, help='lr', required=True)
-
-    # for ACT
-    parser.add_argument('--kl_weight', action='store', type=int, help='KL Weight', required=False)
-    parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
-    parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
-    parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
-    parser.add_argument('--temporal_agg', action='store_true')
-    
-    # Legacy
-    parser.add_argument("--cpu", action="store_true", default=False, help="Use CPU pipeline.")
-    parser.add_argument(
-        "--disable_fabric",
-        action="store_true",
-        default=False,
-        help="Disable fabric and use USD I/O operations.",
-    )
-    parser.add_argument(
-        "--task",
-        type=str,
-        default="Isaac-R1-Multi-Fruit-IK-Abs-Direct-v0",
-        help="Name of the task.",
-    )
-    parser.add_argument("--dataset_dir", nargs="+", help="dataset_dir", required=False)
-    parser.add_argument("--result_dir", default="/home/user/zhr_workspace/isacc_lab_galaxea/results/random_pos_continus", help="result_dir", required=False)
-
-    # append AppLauncher cli args
-    AppLauncher.add_app_launcher_args(parser)
-    # parse the arguments
-    args_cli = parser.parse_args()
-
-    # launch omniverse app
-    app_launcher = AppLauncher(args_cli)
-    simulation_app = app_launcher.app
 
     
     # run the main function
