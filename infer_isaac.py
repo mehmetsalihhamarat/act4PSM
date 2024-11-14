@@ -43,7 +43,7 @@ parser.add_argument(
 parser.add_argument(
     "--task",
     type=str,
-    default="Isaac-R1-Multi-Fruit-IK-Abs-Direct-v0",
+    default="Isaac-R1-Multi-Fruit-IK-Joint-Direct-v0",
     help="Name of the task.",
 )
 parser.add_argument("--dataset_dir", nargs="+", help="dataset_dir", required=False)
@@ -169,8 +169,8 @@ class ACTEvaluator(object):
 
         return policy
 
-    def process_obs(self, obs_dict, tf_type):
-        qpos_numpy = obs_dict["qpos"]
+    def process_obs(self, obs_dict):
+        qpos_numpy = obs_dict["joint_pos"]
         qpos = self.pre_process(qpos_numpy)
         qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
 
@@ -224,7 +224,7 @@ def main():
                     raise ValueError("Observations are None.")
                 # print(f"obs_dict: {obs_dict.keys()}")
 
-                qpos, curr_image = act.process_obs(obs_dict, act.tf_type)
+                qpos, curr_image = act.process_obs(obs_dict)
 
                 act.latest_action_buff = act.policy(qpos, curr_image)
                 # print(f"latest_action_buff: {act.latest_action_buff}, shape: {act.latest_action_buff.shape}")
