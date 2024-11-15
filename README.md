@@ -78,7 +78,8 @@ To __evaluate__ trained ACT, you can play a .h5 file and it would visualize the 
     --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
     --num_epochs 2000  --lr 1e-5 \
     --seed 0 \
-    --temporal_agg
+    --temporal_agg \
+    --img_compressed
 
 A successful evaluation should output a smooth inferred action curve (green) aligning with the actual action and state curve (orange & blue):
 

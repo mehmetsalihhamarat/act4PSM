@@ -81,13 +81,17 @@ def visualize_differences_4(qpos_list, gt_list, infer_list, gt2_list=None, plot_
     plt.close()
 
 
-def get_image(image_dict, camera_names, t):
+def get_image(image_dict, camera_names, t, img_compressed):
     curr_images = []
     for cam_name in camera_names:
-        curr_image_bytes = image_dict[cam_name][t]
-        np_array = np.frombuffer(curr_image_bytes, np.uint8)
-        image = cv2.imdecode(np_array, cv2.IMREAD_UNCHANGED)
-        image = cv2.resize(image, (IMAGE_WIDTH, IMAGE_HEIGHT))
+        if img_compressed:
+            curr_image_bytes = image_dict[cam_name][t]
+            np_array = np.frombuffer(curr_image_bytes, np.uint8)
+            image = cv2.imdecode(np_array, cv2.IMREAD_UNCHANGED)
+            image = cv2.resize(image, (IMAGE_WIDTH, IMAGE_HEIGHT))
+        else:
+            image = image_dict[cam_name][t]
+            image = cv2.resize(image, (IMAGE_WIDTH, IMAGE_HEIGHT))
         curr_image = rearrange(image, 'h w c -> c h w')
         curr_images.append(curr_image)
     curr_image = np.stack(curr_images, axis=0)
@@ -99,6 +103,7 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True, dataset_dir=N
     set_seed(1000)
     ckpt_dir = config['ckpt_dir']
     task_name = config['task_name']
+    img_compressed = config['img_compressed']
     state_dim = 14
     policy_class = config['policy_class']
     temporal_agg = config['temporal_agg']
@@ -164,7 +169,7 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True, dataset_dir=N
                     qpos_numpy = qpos_gt[t]
                     qpos = pre_process(qpos_numpy)
                     qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
-                    curr_image = get_image(image_dict, camera_names, t)
+                    curr_image = get_image(image_dict, camera_names, t, img_compressed)
                     ### query policy
                     if config['policy_class'] == "ACT":
                         if t % query_frequency == 0:
@@ -249,6 +254,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', action='store', type=float, help='lr', required=True)
     parser.add_argument('--batch_size', action='store', type=int, help='batch_size', required=True)
     parser.add_argument('--num_epochs', action='store', type=int, help='num_epochs', required=True)
+    parser.add_argument('--img_compressed', action='store_true')
 
 
     main(vars(parser.parse_args()), dataset_dir)
