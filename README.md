@@ -1,6 +1,6 @@
 # ACT: Action Chunking with Transformers <br> *for Galaxea Mobile Manipulator Dataset*
 
-<img src="./rmsrc/galaxea.png" alt="galaxea_logo" width="400"/>
+<img src="./rmsrc/galaxea.png" alt="galaxea_logo" width="250"/>
 
 This is a complete adaptation of the ACT pipeline, tailored specifically for GalaXea AI's proprietary bimanual humanoid manipulation dataset: [Galaxea Mobile Manipulator Dataset](https://huggingface.co/datasets/GalaxeaAI/GalaxeaMobileManipulatorDataset). The main functionality includes: 
 - Training ACT using .h5 data files
