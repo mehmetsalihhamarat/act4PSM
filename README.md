@@ -1,6 +1,12 @@
-# ACT: Action Chunking with Transformers <br> (for Galaxea Dataset)
+# ACT: Action Chunking with Transformers <br> *for Galaxea Mobile Manipulator Dataset*
 
-#### Original Authors' Project Website: https://tonyzhaozh.github.io/aloha/
+![galaxea_logo](./rmsrc/galaxea.png)
+
+This is a complete adaptation of the ACT pipeline, tailored specifically for GalaXea AI's proprietary bimanual humanoid manipulation dataset: [Galaxea Mobile Manipulator Dataset](https://huggingface.co/datasets/GalaxeaAI/GalaxeaMobileManipulatorDataset). The main functionality includes: 
+- Training ACT using .h5 data files (from [Galaxea Mobile Manipulator Dataset](https://huggingface.co/datasets/GalaxeaAI/GalaxeaMobileManipulatorDataset))
+- Evaluating ACT using .h5 data files 
+- Evaluating ACT in [Galaxea R1 Simulation Isaac Lab](https://galaxea.ai/Guide/R1/Simulation_Isaac_Lab_Tutorial/#define-observation-action-reward-etc)
+- Visualization of training data, training results, and evaluation results
 
 ### Repo Structure
 - ``imitate_episodes.py`` Train ACT using .h5 files
@@ -14,8 +20,8 @@
 
 ### Installation
 
-    conda create -n aloha python=3.8.10
-    conda activate aloha
+    conda create -n galaxea_act python=3.8.10
+    conda activate galaxea_act
     pip install torchvision
     pip install torch
     pip install pyquaternion
@@ -30,13 +36,13 @@
     pip install packaging
     pip install h5py
     pip install ipython
-    cd act_opensource/detr && pip install -e .
+    cd act4galaxeaDS/detr && pip install -e .
 
 ### Example Usages
 
 To set up a new terminal, run:
 
-    conda activate aloha
+    conda activate galaxea_act
     cd <path to act repo>
 
 ### Instructions
@@ -45,6 +51,8 @@ To visualize an episode, run:
 
     python3 visualize_episodes.py \
     --file_path data/pick_basket/dummy-0001-dummy.h5
+
+It saves key frames of the episode and the entire span of joint positions and velocities etc. in plots.
 
 ![vis_1](./rmsrc/vis_1.png)
 ![vis_2](./rmsrc/vis_2.png)
@@ -60,9 +68,9 @@ To __train__ ACT, first add your task config in ``constants.py``, then run:
     --seed 0 \
     --img_compressed
 
-If your image data is not compressed, remove ``--img_compressed``.
+[Galaxea Mobile Manipulator Dataset](https://huggingface.co/datasets/GalaxeaAI/GalaxeaMobileManipulatorDataset) saves all the image data in a highly compressed bytes format to significantly reduce file sizes. Thus it requires a decoding process during training. If your image data is not encoded i.e., already in an image array form, simply remove ``--img_compressed``.
 
-To __evaluate__ trained ACT, you can play a .h5 file and it would visualize the difference between the GT and the predicted actions:
+To __evaluate__ trained ACT, you can play a .h5 file and it would visualize the difference between the ground truth and the predicted actions:
 
     python3 play_h5.py \
     --ckpt_dir ckpt/pick_basket \
@@ -72,9 +80,11 @@ To __evaluate__ trained ACT, you can play a .h5 file and it would visualize the 
     --seed 0 \
     --temporal_agg
 
+A successful evaluation should output a smooth inferred action curve (green) aligning with the actual action and state curve (orange & blue):
+
 ![diff](./rmsrc/diff.jpg)
 
-To evaluate ACT in Isaac Lab, set up the Isaac environment following the [tutorial](https://galaxea.ai/Guide/R1/Simulation_Isaac_Lab_Tutorial/), and run:
+To evaluate ACT in Isaac Sim, set up the GalaXea R1 Isaac Lab environment following [tutorial](https://galaxea.ai/Guide/R1/Simulation_Isaac_Lab_Tutorial/), and run:
 
     python3 infer_isaac.py  \
     --task_name pick_apple  \   
@@ -84,10 +94,13 @@ To evaluate ACT in Isaac Lab, set up the Isaac environment following the [tutori
     --temporal_agg  \
     --seed 0
 
-An evaluation demo in Isaac Sim:
+A successful evaluation looks like:
 
 ![issac](./rmsrc/isaac.gif)
 
 For real-world data where things can be harder to model, train for at least 5000 epochs or 3-4 times the length after the loss has plateaued.
 Please refer to [tuning tips](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing) for more info.
+
+### Reference:
+#### Original Authors' Project Website: https://tonyzhaozh.github.io/aloha/
 
