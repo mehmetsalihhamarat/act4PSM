@@ -84,7 +84,7 @@ To evaluate ACT in Isaac Lab, set up the Isaac environment following the [tutori
     --temporal_agg  \
     --seed 0
 
-An evaluation demo in Issac Sim:
+An evaluation demo in Isaac Sim:
 
 ![issac](./rmsrc/isaac.gif)
 
