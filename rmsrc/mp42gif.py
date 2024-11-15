@@ -24,4 +24,4 @@ def mp4_to_gif(input_path, output_path, speedup_factor=1.0, fps=10, scale=0.5):
     clip.write_gif(output_path, fps=fps)
 
 # Example usage
-mp4_to_gif("isaac.mp4", "isaac.gif", speedup_factor=1.5, fps=10, scale=0.8)
+mp4_to_gif("isaac.mp4", "isaac.gif", speedup_factor=1.5, fps=10, scale=1)
