@@ -98,6 +98,7 @@ def get_image(image_dict, camera_names, t):
 def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True, dataset_dir=None):
     set_seed(1000)
     ckpt_dir = config['ckpt_dir']
+    task_name = config['task_name']
     state_dim = 14
     policy_class = config['policy_class']
     temporal_agg = config['temporal_agg']
@@ -139,7 +140,7 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True, dataset_dir=N
     num_queries = config['chunk_size']
    
     files = list()
-    files.extend(glob.glob(os.path.join(dataset_dir, '**', '*.h5'), recursive=True))
+    files.extend(glob.glob(os.path.join(dataset_dir, task_name, '*.h5'), recursive=True))
     files = sorted(files)
     episode_id = 0
     for filename in files:
@@ -197,7 +198,7 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True, dataset_dir=N
 
             print("file name:", filename)
             visualize_differences_4(qpos_gt, action_gt, action_infer, \
-                                    plot_path = os.path.join(dataset_dir, "plot"), \
+                                    plot_path = os.path.join(dataset_dir, "plot", task_name), \
                                     label_overwrite = ['state','action_gt','infer'], \
                                     plot_name = f'episode_{episode_id}_qpos_qf_{query_frequency}.png')
         episode_id += 1
