@@ -3,7 +3,7 @@
 ![galaxea_logo](./rmsrc/galaxea.png)
 
 This is a complete adaptation of the ACT pipeline, tailored specifically for GalaXea AI's proprietary bimanual humanoid manipulation dataset: [Galaxea Mobile Manipulator Dataset](https://huggingface.co/datasets/GalaxeaAI/GalaxeaMobileManipulatorDataset). The main functionality includes: 
-- Training ACT using .h5 data files (from [Galaxea Mobile Manipulator Dataset](https://huggingface.co/datasets/GalaxeaAI/GalaxeaMobileManipulatorDataset))
+- Training ACT using .h5 data files
 - Evaluating ACT using .h5 data files 
 - Evaluating ACT in [Galaxea R1 Simulation Isaac Lab](https://galaxea.ai/Guide/R1/Simulation_Isaac_Lab_Tutorial/#define-observation-action-reward-etc)
 - Visualization of training data, training results, and evaluation results
