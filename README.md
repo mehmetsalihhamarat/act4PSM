@@ -85,7 +85,7 @@ A successful evaluation should output a smooth inferred action curve (green) ali
 
 ![diff](./rmsrc/diff.jpg)
 
-To evaluate ACT in Isaac Sim, set up the GalaXea R1 Isaac Lab environment following [tutorial](https://galaxea.ai/Guide/R1/Simulation_Isaac_Lab_Tutorial/), and run:
+To evaluate ACT in Isaac Sim, set up the Galaxea R1 Isaac Lab environment following [tutorial](https://galaxea.ai/Guide/R1/Simulation_Isaac_Lab_Tutorial/), and run:
 
     python3 infer_isaac.py  \
     --task_name pick_apple  \   
