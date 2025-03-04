@@ -1,0 +1,38 @@
+Important note: --enable_cameras arg in the Applauncher is adjusted to TRUE inside of the script.  
+
+# Collect demostration using default isaaclab record script
+    Note: since act wants to be number of actions and states equal and chunk size to be fixed, I will adjust my enviroment
+    termination success term as a time out which terminate the episode after episode length. 
+./isaaclab.sh -p scripts/tools/record_demos.py --task Isaac-Lift-Needle-PSM-IK-Rel-v0 --teleop_device keyboard --dataset_file ./datasets/dataset_trial.hdf5 --num_demos 10 --enable_cameras
+
+# Ensure you're on isaaclab repository and activated the isaaclab enviroment
+cd ~/IsaacLab
+conda activate envisaaclab
+
+python3 imitate_episodes.py \
+--task_name psm_lift \
+--ckpt_dir ckpt/psm_lift \
+--policy_class ACT --kl_weight 10 --chunk_size 150 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+--num_epochs 10000  --lr 1e-5 \
+--seed 0
+
+#  Now we can run the trained policy to see results in the isaacsim
+./isaaclab.sh -p act4galaxeaDS/infer_isaac.py \
+--ckpt_dir act4galaxeaDS/ckpt/psm_lift/ \
+--policy_class ACT \
+--task_name Isaac-Lift-Needle-PSM-IK-Rel-v0 \
+--batch_size 7 --seed 0 --num_epochs 3300 --lr 1e-5 --chunk_size 150 \
+--hidden_dim 512 --dim_feedforward 3200 --kl_weight 10
+
+
+
+
+
+
+
+
+
+
+
+
+

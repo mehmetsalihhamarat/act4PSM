@@ -14,8 +14,6 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Play policy trained using robomimic for Isaac Lab environments.")
 
-parser = argparse.ArgumentParser(conflict_handler="resolve")
-
 parser.add_argument('--eval', action='store_true')
 parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True)
 parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', required=True)
@@ -45,15 +43,15 @@ parser.add_argument(
 parser.add_argument(
     "--task",
     type=str,
-    default="Isaac-Lift-Needle-PSM-IK-Rel-v0",
+    default="Isaac-R1-Multi-Fruit-IK-Joint-Direct-v0",
     help="Name of the task.",
 )
 parser.add_argument("--dataset_dir", nargs="+", help="dataset_dir", required=False)
-parser.add_argument("--result_dir", default="/home/nural/IsaacLab/results_act/lift_needle", help="result_dir", required=False)
+parser.add_argument("--result_dir", default="/home/user/zhr_workspace/isacc_lab_galaxea/results/random_pos_continus", help="result_dir", required=False)
+
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
-
 # parse the arguments
 args_cli = parser.parse_args()
 
@@ -74,8 +72,8 @@ from einops import rearrange
 # from tools.parser import get_parser
 # from scipy.spatial.transform import Rotation as R
 # from geometry_msgs.msg import Transform
-import isaaclab_tasks  # noqa: F401
-from isaaclab_tasks.utils import parse_env_cfg
+import omni.isaac.lab_tasks  # noqa: F401
+from omni.isaac.lab_tasks.utils import parse_env_cfg
 
 import torch
 import numpy as np
@@ -112,8 +110,8 @@ class ACTEvaluator(object):
         self.temporal_agg = args_dict["temporal_agg"]
         self.query_freq = args_dict["chunk_size"]
         self.chunk_size = args_dict["chunk_size"]
-        self.camera_names = ['rgb_endo_cam', 'rgb_wrist_cam']
-        self.action_dim = 7
+        self.camera_names = ["front_rgb", "left_rgb", "right_rgb"]
+        self.action_dim = 14
         self.all_time_actions = torch.zeros(
             [self.chunk_size, self.chunk_size, self.action_dim]
         ).cuda()
@@ -137,7 +135,7 @@ class ACTEvaluator(object):
     def _make_policy(self, args_dict: dict):
         # args_dict["use_one_hot_task"] = False  # todo: 暂时默认不开启multi-task
 
-        camera_names = ['rgb_endo_cam', 'rgb_wrist_cam']
+        camera_names = ['rgb_head', 'rgb_left_hand', 'rgb_right_hand']
         # fixed parameters
         # state_dim = 7
         lr_backbone = 1e-5
@@ -191,20 +189,13 @@ class ACTEvaluator(object):
 def main():
     """Run a trained policy from robomimic with Isaac Lab environment."""
     # parse configuration
-    """
     env_cfg = parse_env_cfg(
         args_cli.task,
         use_gpu=not args_cli.cpu,
         num_envs=1,
         use_fabric=not args_cli.disable_fabric,
     )
-    """
-    env_cfg = parse_env_cfg(
-        args_cli.task,
-        device="cuda:0" if not args_cli.cpu else "cpu",  # Use "cuda:0" if not using CPU
-        num_envs=1,
-        use_fabric=not args_cli.disable_fabric,
-    )
+
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
 
@@ -220,10 +211,8 @@ def main():
         # run everything in inference mode
         count = 0
         with torch.inference_mode():
-            #init_pos = env.unwrapped.init_pos (init_state)
-            init_pos = torch.zeros(7, device=env.unwrapped.device)
-            #task_id = env.unwrapped.object_id
-            task_id = "psm"
+            init_pos = env.unwrapped.init_pos
+            task_id = env.unwrapped.object_id
             if act.tick_times % act.query_freq == 0:
                 obs = obs["policy"]
                 obs_dict = {
@@ -270,7 +259,7 @@ def main():
             action = (
                 torch.from_numpy(action)
                 .to(device=env.unwrapped.device)
-                .view(1, 7)
+                .view(1, 14)
                 .float()
             )
             # print(f"tick times {act.tick_times}, output action {action}")
@@ -279,15 +268,10 @@ def main():
             obs, reward, terminated, truncated, info = env.step(action)
             dones = terminated | truncated
             reset_idx = dones.nonzero(as_tuple=False).squeeze(-1)
-
-            # Success counter
-            success_count = 0
-            total_episodes = 0
-
             if dones.any():
                 act.all_time_actions = torch.zeros([act.chunk_size, act.chunk_size, act.action_dim]).cuda()
                 act.tick_times = 0
-                """
+
                 np_saver_success = os.path.join(f"{args_cli.result_dir}", "task_"+str(task_id), "npy", "success")
                 np_saver_full = os.path.join(f"{args_cli.result_dir}", "task_"+str(task_id), "npy", "full")
                 if not os.path.exists(np_saver_success):
@@ -297,27 +281,15 @@ def main():
                 if terminated.any():
                     np.save(os.path.join(np_saver_success, f"episode_{episode_idx}.npy"), init_pos.cpu().numpy())
                 np.save(os.path.join(np_saver_full, f"episode_{episode_idx}.npy"), init_pos.cpu().numpy())
-                """
-                ## Success counter
-                if terminated.any():
-                    # Instead of saving, print if episode is successful or not
-                    print(f'Episode_{episode_idx}: TRUE')
-                    success_count += 1
-                else:
-                    print(f'Episode_{episode_idx}: FALSE')
-                total_episodes += 1
+                
 
                 episode_idx += 1
 
-        act.tick_times += 1
 
-    #success_rate = success_count / total_episodes
-    #print(f"Success Rate after {total_episodes} episodes: {success_rate:.2f}")    
+        act.tick_times += 1
 
     # close the simulator
     env.close()
-
-    
 
 
 if __name__ == "__main__":
@@ -325,8 +297,5 @@ if __name__ == "__main__":
     
     # run the main function
     main()
-    
     # close sim app
     simulation_app.close()
-
-
