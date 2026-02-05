@@ -32,7 +32,7 @@ def get_sinusoid_encoding_table(n_position, d_hid):
 
 class DETRVAE(nn.Module):
     """ This is the DETR module that performs object detection """
-    def __init__(self, backbones, transformer, encoder, state_dim, num_queries, camera_names):
+    def __init__(self, backbones, transformer, encoder, state_dim, num_queries, camera_names, action_dim):
         """ Initializes the model.
         Parameters:
             backbones: torch module of the backbone to be used. See backbone.py
@@ -48,7 +48,8 @@ class DETRVAE(nn.Module):
         self.transformer = transformer
         self.encoder = encoder
         hidden_dim = transformer.d_model
-        self.action_head = nn.Linear(hidden_dim, state_dim)
+        #self.action_head = nn.Linear(hidden_dim, state_dim)
+        self.action_head = nn.Linear(hidden_dim, action_dim)
         self.is_pad_head = nn.Linear(hidden_dim, 1)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
         print(f"============{state_dim=}==============")
@@ -66,7 +67,7 @@ class DETRVAE(nn.Module):
         # encoder extra parameters
         self.latent_dim = 32 # final size of latent z # TODO tune
         self.cls_embed = nn.Embedding(1, hidden_dim) # extra cls token embedding
-        self.encoder_action_proj = nn.Linear(state_dim, hidden_dim) # project action to embedding
+        self.encoder_action_proj = nn.Linear(action_dim, hidden_dim) # project action to embedding
         self.encoder_joint_proj = nn.Linear(state_dim, hidden_dim)  # project qpos to embedding
         self.latent_proj = nn.Linear(hidden_dim, self.latent_dim*2) # project hidden state to latent std, var
         self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+num_queries, hidden_dim)) # [CLS], qpos, a_seq
@@ -120,6 +121,7 @@ class DETRVAE(nn.Module):
             all_cam_pos = []
             for cam_id, cam_name in enumerate(self.camera_names):
                 features, pos = self.backbones[0](image[:, cam_id]) # HARDCODED
+                #features, pos = self.backbones[cam_id](image[:, cam_id])
                 features = features[0] # take the last layer feature # (bs, feature_dim, h, w)
                 pos = pos[0] # (bs, pos_dim*2, h, w)
                 all_cam_features.append(self.input_proj(features)) # (bs, hidden_dim, h, w)
@@ -160,7 +162,8 @@ def build_encoder(args):
 
 
 def build(args):
-    state_dim = 7; #7 + 7 # TODO hardcode
+    state_dim = 8 # TODO hardcode
+    action_dim = 7 # TODO hardcode
 
     # From state
     # backbone = None # from state for now, no need for conv nets
@@ -168,6 +171,9 @@ def build(args):
     backbones = []
     backbone = build_backbone(args)
     backbones.append(backbone)
+    #for _ in args.camera_names:
+    #    backbone = build_backbone(args)
+    #    backbones.append(backbone)
 
     transformer = build_transformer(args)
 
@@ -180,6 +186,7 @@ def build(args):
         state_dim=state_dim,
         num_queries=args.num_queries,
         camera_names=args.camera_names,
+        action_dim=action_dim,
     )
 
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)

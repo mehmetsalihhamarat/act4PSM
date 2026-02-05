@@ -1,3 +1,4 @@
+import time
 import torch
 import numpy as np
 import os
@@ -15,6 +16,8 @@ from constants import TASK_CONFIGS
 
 import IPython
 e = IPython.embed
+
+start_time = time.time()
 
 def main(args):
     set_seed(1)
@@ -54,6 +57,13 @@ def main(args):
     else:
         raise NotImplementedError
 
+    # Hardcode resume path or leave None
+    is_resume = True
+    resume_ckpt_path = os.path.join(ckpt_dir, 'policy_best_1.ckpt')
+    if not os.path.exists(resume_ckpt_path):
+        resume_ckpt_path = None
+        is_resume = False
+
     config = {
         'num_epochs': num_epochs,
         'ckpt_dir': ckpt_dir,
@@ -64,7 +74,9 @@ def main(args):
         'task_name': task_name,
         'seed': args['seed'],
         'temporal_agg': args['temporal_agg'],
-        'camera_names': camera_names
+        'camera_names': camera_names,
+        'resume_from': resume_ckpt_path,
+        'is_resume': is_resume,
     }
 
     train_dataloader, val_dataloader, stats = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, args['chunk_size'], args['img_compressed'])
@@ -115,7 +127,7 @@ def get_image(ts, camera_names):
 def forward_pass(data, policy):
     image_data, qpos_data, action_data, is_pad = data
     image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
-    return policy(qpos_data, image_data, action_data, is_pad) # TODO remove None
+    return policy(qpos_data, image_data, actions=action_data, is_pad=is_pad)
 
 
 def train_bc(train_dataloader, val_dataloader, config):
@@ -129,12 +141,25 @@ def train_bc(train_dataloader, val_dataloader, config):
 
     policy = make_policy(policy_class, policy_config)
     policy.cuda()
+    # begins
+    resume_ckpt_path = config.get('resume_from', None)
+    if resume_ckpt_path is not None:
+        print(f"Resuming from checkpoint: {resume_ckpt_path}")
+        state_dict = torch.load(resume_ckpt_path)
+        policy.load_state_dict(state_dict)
+    # ends
     optimizer = make_optimizer(policy_class, policy)
 
     train_history = []
     validation_history = []
     min_val_loss = np.inf
     best_ckpt_info = None
+
+    is_resume = config['is_resume']
+    if is_resume:
+        start_epoch = num_epochs
+    else:
+        start_epoch = 0
     for epoch in tqdm(range(num_epochs)):
         print(f'\nEpoch {epoch}')
         # validation
@@ -144,6 +169,13 @@ def train_bc(train_dataloader, val_dataloader, config):
             for batch_idx, data in enumerate(val_dataloader):
                 forward_dict = forward_pass(data, policy)
                 epoch_dicts.append(forward_dict)
+
+        #with torch.inference_mode():
+        #    policy.eval()
+        #    epoch_dicts = []
+        #    for batch_idx, data in enumerate(val_dataloader):
+        #        forward_dict = forward_pass(data, policy)
+        #        epoch_dicts.append(forward_dict)
             epoch_summary = compute_dict_mean(epoch_dicts)
             validation_history.append(epoch_summary)
 
@@ -176,7 +208,8 @@ def train_bc(train_dataloader, val_dataloader, config):
             summary_string += f'{k}: {v.item():.3f} '
         print(summary_string)
 
-        if epoch % 100 == 0:
+        save_epoch_interval = 500 #Saving interval
+        if epoch % save_epoch_interval == 0:
             ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{epoch}_seed_{seed}.ckpt')
             torch.save(policy.state_dict(), ckpt_path)
             plot_history(train_history, validation_history, epoch, ckpt_dir, seed)
@@ -237,3 +270,7 @@ if __name__ == '__main__':
     parser.add_argument('--img_compressed', action='store_true')
 
     main(vars(parser.parse_args()))
+
+end_time = time.time()
+elapsed_time = end_time - start_time
+print(f"\nElapsed Time: {elapsed_time // 3600:.0f}h {(elapsed_time % 3600) // 60:.0f}m {elapsed_time % 60:.2f}s")

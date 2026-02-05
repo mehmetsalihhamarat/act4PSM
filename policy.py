@@ -1,6 +1,6 @@
 import torch.nn as nn
 from torch.nn import functional as F
-import torchvision.transforms as transforms
+import torch
 
 from detr.main import build_ACT_model_and_optimizer
 import IPython
@@ -17,9 +17,17 @@ class ACTPolicy(nn.Module):
 
     def __call__(self, qpos, image, actions=None, is_pad=None):
         env_state = None
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                         std=[0.229, 0.224, 0.225])
-        image = normalize(image)
+        # Normalize images to ImageNet stats; support [B,C,H,W] or [B,K,C,H,W]
+        mean = torch.tensor([0.485, 0.456, 0.406], device=image.device, dtype=image.dtype)
+        std = torch.tensor([0.229, 0.224, 0.225], device=image.device, dtype=image.dtype)
+        if image.dim() == 4:
+            image = (image - mean.view(1, -1, 1, 1)) / std.view(1, -1, 1, 1)
+            # Expand to 5D with a single camera for the model
+            image = image.unsqueeze(1)
+        elif image.dim() == 5:
+            image = (image - mean.view(1, 1, -1, 1, 1)) / std.view(1, 1, -1, 1, 1)
+        else:
+            raise ValueError(f"Unexpected image dims {image.shape}, expected 4D or 5D tensor")
         if actions is not None: # training time
             actions = actions[:, :self.model.num_queries]
             is_pad = is_pad[:, :self.model.num_queries]

@@ -173,7 +173,11 @@ def eval_bc_h5(config, ckpt_name, camera_names, save_episode=True, dataset_dir=N
                     ### query policy
                     if config['policy_class'] == "ACT":
                         if t % query_frequency == 0:
-                            all_actions = policy(qpos, curr_image)
+                            policy_out = policy(qpos, curr_image)
+                            if isinstance(policy_out, dict):
+                                all_actions = policy_out['action_pred']
+                            else:
+                                all_actions = policy_out
                         if temporal_agg:
                             all_time_actions[t % num_queries] = all_actions  
                             if (t >= num_queries - 1):
